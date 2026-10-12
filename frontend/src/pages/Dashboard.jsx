@@ -258,9 +258,13 @@ export default function Dashboard({ onNavigate }) {
                 <span className="text-xs font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
                   Result Pending
                 </span>
-                <span className="text-xs text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('matches', { matchNumber: pendingMatches[0].match_number })}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
                   Match #{pendingMatches[0].match_number}
-                </span>
+                </button>
               </div>
               <div className="text-base font-bold text-slate-100 mt-0.5">
                 {pendingMatches[0].team1_name} ({pendingMatches[0].team1_code}) vs {pendingMatches[0].team2_name} ({pendingMatches[0].team2_code})

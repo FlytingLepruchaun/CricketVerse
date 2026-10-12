@@ -150,6 +150,8 @@ python database/init_db.py
 ```
 *This verifies your MySQL connection, ensures the `cricketverse` database and tables are populated, creates the default admin user, and verifies row counts (10 teams, 110 players, 74 matches, etc.).*
 
+The `run.bat` and `run.sh` launchers rebuild the frontend before starting Flask, so the server serves the latest frontend source on each run.
+
 #### 4. Launch Application
 - **Windows 1-Click**: Double-click `run.bat` or run:
   ```cmd

@@ -12,7 +12,10 @@ USE CricketVerse;
 CREATE TABLE IF NOT EXISTS Teams (
     team_id INT PRIMARY KEY,
     team_name VARCHAR(100) NOT NULL,
-    team_code VARCHAR(10) NOT NULL UNIQUE
+    team_code VARCHAR(10) NOT NULL UNIQUE,
+    CONSTRAINT chk_teams_id_positive CHECK (team_id > 0),
+    CONSTRAINT chk_teams_name_nonblank CHECK (CHAR_LENGTH(TRIM(team_name)) > 0),
+    CONSTRAINT chk_teams_code_nonblank CHECK (CHAR_LENGTH(TRIM(team_code)) > 0)
 );
 
 INSERT INTO Teams (team_id, team_name, team_code) VALUES
@@ -36,7 +39,10 @@ CREATE TABLE IF NOT EXISTS Players (
     player_id INT PRIMARY KEY,
     player_name VARCHAR(100) NOT NULL,
     team_id INT NOT NULL,
-    FOREIGN KEY (team_id) REFERENCES Teams(team_id) ON DELETE CASCADE
+    FOREIGN KEY (team_id) REFERENCES Teams(team_id) ON DELETE CASCADE,
+    CONSTRAINT chk_players_id_positive CHECK (player_id > 0),
+    CONSTRAINT chk_players_name_nonblank CHECK (CHAR_LENGTH(TRIM(player_name)) > 0),
+    CONSTRAINT chk_players_team_positive CHECK (team_id > 0)
 );
 
 INSERT INTO Players (player_id, player_name, team_id) VALUES
@@ -180,91 +186,124 @@ CREATE TABLE IF NOT EXISTS Matches (
     match_date DATE NOT NULL,
     team1_id INT NOT NULL,
     team2_id INT NOT NULL,
-    venue VARCHAR(150),
+    venue VARCHAR(150) NOT NULL,
+    team1_runs INT UNSIGNED NULL,
+    team1_overs DECIMAL(4,1) UNSIGNED NULL,
+    team1_wickets_lost TINYINT UNSIGNED NULL,
+    team2_runs INT UNSIGNED NULL,
+    team2_overs DECIMAL(4,1) UNSIGNED NULL,
+    team2_wickets_lost TINYINT UNSIGNED NULL,
+    winning_margin INT UNSIGNED NULL,
+    winning_margin_type ENUM('runs', 'wickets') NULL,
     winner_id INT NULL,
     FOREIGN KEY (team1_id) REFERENCES Teams(team_id),
     FOREIGN KEY (team2_id) REFERENCES Teams(team_id),
-    FOREIGN KEY (winner_id) REFERENCES Teams(team_id)
+    FOREIGN KEY (winner_id) REFERENCES Teams(team_id),
+    CONSTRAINT chk_matches_number_positive CHECK (match_number > 0),
+    CONSTRAINT chk_matches_different_teams CHECK (team1_id <> team2_id),
+    CONSTRAINT chk_matches_venue_nonblank CHECK (CHAR_LENGTH(TRIM(venue)) > 0),
+    CONSTRAINT chk_matches_winner_participates CHECK (winner_id IS NULL OR winner_id IN (team1_id, team2_id)),
+    CONSTRAINT chk_matches_team1_score_complete CHECK (
+        (team1_runs IS NULL AND team1_overs IS NULL AND team1_wickets_lost IS NULL)
+        OR (team1_runs IS NOT NULL AND team1_overs IS NOT NULL AND team1_wickets_lost IS NOT NULL)
+    ),
+    CONSTRAINT chk_matches_team2_score_complete CHECK (
+        (team2_runs IS NULL AND team2_overs IS NULL AND team2_wickets_lost IS NULL)
+        OR (team2_runs IS NOT NULL AND team2_overs IS NOT NULL AND team2_wickets_lost IS NOT NULL)
+    ),
+    CONSTRAINT chk_matches_team1_overs_valid CHECK (
+        team1_overs IS NULL OR (team1_overs <= 20 AND MOD(team1_overs * 10, 10) <= 5)
+    ),
+    CONSTRAINT chk_matches_team2_overs_valid CHECK (
+        team2_overs IS NULL OR (team2_overs <= 20 AND MOD(team2_overs * 10, 10) <= 5)
+    ),
+    CONSTRAINT chk_matches_team1_wickets_valid CHECK (team1_wickets_lost IS NULL OR team1_wickets_lost <= 10),
+    CONSTRAINT chk_matches_team2_wickets_valid CHECK (team2_wickets_lost IS NULL OR team2_wickets_lost <= 10),
+    CONSTRAINT chk_matches_margin_complete CHECK (
+        (winning_margin IS NULL AND winning_margin_type IS NULL)
+        OR (winning_margin IS NOT NULL AND winning_margin_type IS NOT NULL)
+    ),
+    CONSTRAINT chk_matches_margin_positive CHECK (winning_margin IS NULL OR winning_margin > 0)
 );
 
 INSERT INTO Matches
-(match_number, match_date, team1_id, team2_id, venue, winner_id)
+(match_number, match_date, team1_id, team2_id, venue, team1_runs, team1_overs, team1_wickets_lost, team2_runs, team2_overs, team2_wickets_lost, winning_margin, winning_margin_type, winner_id)
 VALUES
-(1, '2026-03-28', 9, 10, 'M. Chinnaswamy Stadium, Bengaluru', 9),
-(2, '2026-03-29', 6, 4, 'Wankhede Stadium, Mumbai', 6),
-(3, '2026-03-30', 8, 1, 'Barsapara Cricket Stadium, Guwahati', 8),
-(4, '2026-03-31', 7, 3, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 7),
-(5, '2026-04-01', 5, 2, 'Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow', 2),
-(6, '2026-04-02', 4, 10, 'Eden Gardens, Kolkata', 10),
-(7, '2026-04-03', 1, 7, 'MA Chidambaram Stadium, Chennai', 7),
-(8, '2026-04-04', 2, 6, 'Arun Jaitley Stadium, New Delhi', 2),
-(9, '2026-04-04', 3, 8, 'Narendra Modi Stadium, Ahmedabad', 8),
-(10, '2026-04-05', 10, 5, 'Rajiv Gandhi International Stadium, Hyderabad', 5),
-(11, '2026-04-05', 9, 1, 'M. Chinnaswamy Stadium, Bengaluru', 9),
-(12, '2026-04-06', 4, 7, 'Eden Gardens, Kolkata', NULL),
-(13, '2026-04-07', 8, 6, 'Barsapara Cricket Stadium, Guwahati', 8),
-(14, '2026-04-08', 2, 3, 'Arun Jaitley Stadium, New Delhi', 3),
-(15, '2026-04-09', 4, 5, 'Eden Gardens, Kolkata', 5),
-(16, '2026-04-10', 8, 9, 'Barsapara Cricket Stadium, Guwahati', 8),
-(17, '2026-04-11', 7, 10, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 7),
-(18, '2026-04-11', 1, 2, 'MA Chidambaram Stadium, Chennai', 1),
-(19, '2026-04-12', 5, 3, 'Ekana Cricket Stadium, Lucknow', 3),
-(20, '2026-04-12', 6, 9, 'Wankhede Stadium, Mumbai', 9),
-(21, '2026-04-13', 10, 8, 'Rajiv Gandhi International Stadium, Hyderabad', 10),
-(22, '2026-04-14', 1, 4, 'MA Chidambaram Stadium, Chennai', 1),
-(23, '2026-04-15', 9, 5, 'M. Chinnaswamy Stadium, Bengaluru', 9),
-(24, '2026-04-16', 6, 7, 'Wankhede Stadium, Mumbai', 7),
-(25, '2026-04-17', 3, 4, 'Narendra Modi Stadium, Ahmedabad', 3),
-(26, '2026-04-18', 9, 2, 'M. Chinnaswamy Stadium, Bengaluru', 2),
-(27, '2026-04-18', 10, 1, 'Rajiv Gandhi International Stadium, Hyderabad', 10),
-(28, '2026-04-19', 4, 8, 'Eden Gardens, Kolkata', 4),
-(29, '2026-04-19', 7, 5, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 7),
-(30, '2026-04-20', 3, 6, 'Narendra Modi Stadium, Ahmedabad', 6),
-(31, '2026-04-21', 10, 2, 'Rajiv Gandhi International Stadium, Hyderabad', 10),
-(32, '2026-04-22', 5, 8, 'Ekana Cricket Stadium, Lucknow', 8),
-(33, '2026-04-23', 6, 1, 'Wankhede Stadium, Mumbai', 1),
-(34, '2026-04-24', 9, 3, 'M. Chinnaswamy Stadium, Bengaluru', 9),
-(35, '2026-04-25', 2, 7, 'Arun Jaitley Stadium, New Delhi', 7),
-(36, '2026-04-25', 8, 10, 'Sawai Mansingh Stadium, Jaipur', 10),
-(37, '2026-04-26', 1, 3, 'MA Chidambaram Stadium, Chennai', 3),
-(38, '2026-04-26', 5, 4, 'Ekana Cricket Stadium, Lucknow', 4),
-(39, '2026-04-27', 2, 9, 'Arun Jaitley Stadium, New Delhi', 9),
-(40, '2026-04-28', 7, 8, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 8),
-(41, '2026-04-29', 6, 10, 'Wankhede Stadium, Mumbai', 10),
-(42, '2026-04-30', 3, 9, 'Narendra Modi Stadium, Ahmedabad', 3),
-(43, '2026-05-01', 8, 2, 'Sawai Mansingh Stadium, Jaipur', 2),
-(44, '2026-05-02', 1, 6, 'MA Chidambaram Stadium, Chennai', 1),
-(45, '2026-05-03', 10, 4, 'Rajiv Gandhi International Stadium, Hyderabad', 4),
-(46, '2026-05-03', 3, 7, 'Narendra Modi Stadium, Ahmedabad', 3),
-(47, '2026-05-04', 6, 5, 'Wankhede Stadium, Mumbai', 6),
-(48, '2026-05-05', 2, 1, 'Arun Jaitley Stadium, New Delhi', 1),
-(49, '2026-05-06', 10, 7, 'Rajiv Gandhi International Stadium, Hyderabad', 10),
-(50, '2026-05-07', 5, 9, 'Ekana Cricket Stadium, Lucknow', 5),
-(51, '2026-05-08', 2, 4, 'Arun Jaitley Stadium, New Delhi', 4),
-(52, '2026-05-09', 8, 3, 'Sawai Mansingh Stadium, Jaipur', 3),
-(53, '2026-05-10', 1, 5, 'MA Chidambaram Stadium, Chennai', 1),
-(54, '2026-05-10', 9, 6, 'Shaheed Veer Narayan Singh International Stadium, Raipur', 9),
-(55, '2026-05-11', 7, 2, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 2),
-(56, '2026-05-12', 3, 10, 'Narendra Modi Stadium, Ahmedabad', 3),
-(57, '2026-05-13', 9, 4, 'Shaheed Veer Narayan Singh International Stadium, Raipur', 9),
-(58, '2026-05-14', 7, 6, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 6),
-(59, '2026-05-15', 5, 1, 'Ekana Cricket Stadium, Lucknow', 5),
-(60, '2026-05-16', 4, 3, 'Eden Gardens, Kolkata', 4),
-(61, '2026-05-17', 7, 9, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 9),
-(62, '2026-05-17', 2, 8, 'Arun Jaitley Stadium, New Delhi', 2),
-(63, '2026-05-18', 1, 10, 'MA Chidambaram Stadium, Chennai', 10),
-(64, '2026-05-19', 5, 8, 'Sawai Mansingh Stadium, Jaipur', 8),
-(65, '2026-05-20', 4, 6, 'Eden Gardens, Kolkata', 4),
-(66, '2026-05-21', 3, 1, 'Narendra Modi Stadium, Ahmedabad', 3),
-(67, '2026-05-22', 10, 9, 'Rajiv Gandhi International Stadium, Hyderabad', 10),
-(68, '2026-05-23', 5, 7, 'Ekana Cricket Stadium, Lucknow', 7),
-(69, '2026-05-24', 6, 8, 'Wankhede Stadium, Mumbai', 8),
-(70, '2026-05-24', 4, 2, 'Eden Gardens, Kolkata', 2),
-(71, '2026-05-26', 9, 3, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 9),
-(72, '2026-05-27', 10, 8, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 8),
-(73, '2026-05-29', 3, 8, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 3),
-(74, '2026-05-31', 9, 3, 'Narendra Modi Stadium, Ahmedabad', 9)
-ON DUPLICATE KEY UPDATE match_date=VALUES(match_date), team1_id=VALUES(team1_id), team2_id=VALUES(team2_id), venue=VALUES(venue), winner_id=VALUES(winner_id);
+(1, '2026-03-28', 9, 10, 'M. Chinnaswamy Stadium, Bengaluru', 203, 15.4, 4, 201, 20.0, 9, 6, 'wickets', 9),
+(2, '2026-03-29', 6, 4, 'Wankhede Stadium, Mumbai', 224, 19.1, 4, 220, 20.0, 4, 6, 'wickets', 6),
+(3, '2026-03-30', 8, 1, 'Barsapara Cricket Stadium, Guwahati', 128, 12.1, 2, 127, 19.4, 10, 8, 'wickets', 8),
+(4, '2026-03-31', 7, 3, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 165, 19.1, 7, 162, 20.0, 6, 3, 'wickets', 7),
+(5, '2026-04-01', 5, 2, 'Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow', 141, 18.4, 10, 145, 17.1, 4, 6, 'wickets', 2),
+(6, '2026-04-02', 4, 10, 'Eden Gardens, Kolkata', 161, 16.0, 10, 226, 20.0, 8, 65, 'runs', 10),
+(7, '2026-04-03', 1, 7, 'MA Chidambaram Stadium, Chennai', 209, 20.0, 5, 210, 18.4, 5, 5, 'wickets', 7),
+(8, '2026-04-04', 2, 6, 'Arun Jaitley Stadium, New Delhi', 164, 18.1, 4, 162, 20.0, 6, 6, 'wickets', 2),
+(9, '2026-04-04', 3, 8, 'Narendra Modi Stadium, Ahmedabad', 204, 20.0, 8, 210, 20.0, 6, 6, 'runs', 8),
+(10, '2026-04-05', 10, 5, 'Rajiv Gandhi International Stadium, Hyderabad', 156, 20.0, 9, 160, 19.5, 5, 5, 'wickets', 5),
+(11, '2026-04-05', 9, 1, 'M. Chinnaswamy Stadium, Bengaluru', 250, 20.0, 3, 207, 19.4, 10, 43, 'runs', 9),
+(12, '2026-04-06', 4, 7, 'Eden Gardens, Kolkata', 25, 3.4, 2, NULL, NULL, NULL, NULL, NULL, NULL),
+(13, '2026-04-07', 8, 6, 'Barsapara Cricket Stadium, Guwahati', 150, 11.0, 3, 123, 11.0, 9, 27, 'runs', 8),
+(14, '2026-04-08', 2, 3, 'Arun Jaitley Stadium, New Delhi', 209, 20.0, 8, 210, 20.0, 4, 1, 'runs', 3),
+(15, '2026-04-09', 4, 5, 'Eden Gardens, Kolkata', 181, 20.0, 4, 182, 20.0, 7, 3, 'wickets', 5),
+(16, '2026-04-10', 8, 9, 'Barsapara Cricket Stadium, Guwahati', 202, 18.0, 4, 201, 20.0, 8, 6, 'wickets', 8),
+(17, '2026-04-11', 7, 10, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 223, 18.5, 4, 219, 20.0, 6, 6, 'wickets', 7),
+(18, '2026-04-11', 1, 2, 'MA Chidambaram Stadium, Chennai', 212, 20.0, 2, 189, 20.0, 10, 23, 'runs', 1),
+(19, '2026-04-12', 5, 3, 'Ekana Cricket Stadium, Lucknow', 164, 20.0, 8, 165, 18.4, 3, 7, 'wickets', 3),
+(20, '2026-04-12', 6, 9, 'Wankhede Stadium, Mumbai', 222, 20.0, 5, 240, 20.0, 4, 18, 'runs', 9),
+(21, '2026-04-13', 10, 8, 'Rajiv Gandhi International Stadium, Hyderabad', 216, 20.0, 6, 159, 19.0, 10, 57, 'runs', 10),
+(22, '2026-04-14', 1, 4, 'MA Chidambaram Stadium, Chennai', 192, 20.0, 5, 160, 20.0, 7, 32, 'runs', 1),
+(23, '2026-04-15', 9, 5, 'M. Chinnaswamy Stadium, Bengaluru', 149, 15.1, 5, 146, 20.0, 10, 5, 'wickets', 9),
+(24, '2026-04-16', 6, 7, 'Wankhede Stadium, Mumbai', 195, 20.0, 6, 198, 16.3, 3, 7, 'wickets', 7),
+(25, '2026-04-17', 3, 4, 'Narendra Modi Stadium, Ahmedabad', 181, 19.4, 5, 180, 20.0, 10, 5, 'wickets', 3),
+(26, '2026-04-18', 9, 2, 'M. Chinnaswamy Stadium, Bengaluru', 175, 20.0, 8, 179, 19.5, 4, 6, 'wickets', 2),
+(27, '2026-04-18', 10, 1, 'Rajiv Gandhi International Stadium, Hyderabad', 194, 20.0, 9, 184, 20.0, 8, 10, 'runs', 10),
+(28, '2026-04-19', 4, 8, 'Eden Gardens, Kolkata', 161, 19.4, 6, 155, 20.0, 9, 4, 'wickets', 4),
+(29, '2026-04-19', 7, 5, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 254, 20.0, 7, 200, 20.0, 5, 54, 'runs', 7),
+(30, '2026-04-20', 3, 6, 'Narendra Modi Stadium, Ahmedabad', 100, 15.5, 10, 199, 20.0, 5, 99, 'runs', 6),
+(31, '2026-04-21', 10, 2, 'Rajiv Gandhi International Stadium, Hyderabad', 242, 20.0, 2, 195, 20.0, 9, 47, 'runs', 10),
+(32, '2026-04-22', 5, 8, 'Ekana Cricket Stadium, Lucknow', 119, 18.0, 10, 159, 20.0, 6, 40, 'runs', 8),
+(33, '2026-04-23', 6, 1, 'Wankhede Stadium, Mumbai', 104, 19.0, 10, 207, 20.0, 6, 103, 'runs', 1),
+(34, '2026-04-24', 9, 3, 'M. Chinnaswamy Stadium, Bengaluru', 206, 18.5, 5, 205, 20.0, 3, 5, 'wickets', 9),
+(35, '2026-04-25', 2, 7, 'Arun Jaitley Stadium, New Delhi', 264, 20.0, 2, 265, 18.5, 4, 6, 'wickets', 7),
+(36, '2026-04-25', 8, 10, 'Sawai Mansingh Stadium, Jaipur', 228, 20.0, 6, 229, 18.3, 5, 5, 'wickets', 10),
+(37, '2026-04-26', 1, 3, 'MA Chidambaram Stadium, Chennai', 158, 20.0, 7, 162, 16.4, 2, 8, 'wickets', 3),
+(38, '2026-04-26', 5, 4, 'Ekana Cricket Stadium, Lucknow', 155, 20.0, 8, 155, 20.0, 7, NULL, NULL, 4),
+(39, '2026-04-27', 2, 9, 'Arun Jaitley Stadium, New Delhi', 75, 16.3, 10, 77, 6.3, 1, 9, 'wickets', 9),
+(40, '2026-04-28', 7, 8, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 222, 20.0, 4, 228, 19.2, 4, 6, 'wickets', 8),
+(41, '2026-04-29', 6, 10, 'Wankhede Stadium, Mumbai', 243, 20.0, 5, 249, 18.4, 4, 6, 'wickets', 10),
+(42, '2026-04-30', 3, 9, 'Narendra Modi Stadium, Ahmedabad', 158, 15.5, 6, 155, 19.2, 10, 4, 'wickets', 3),
+(43, '2026-05-01', 8, 2, 'Sawai Mansingh Stadium, Jaipur', 225, 20.0, 6, 226, 19.1, 3, 7, 'wickets', 2),
+(44, '2026-05-02', 1, 6, 'MA Chidambaram Stadium, Chennai', 160, 18.1, 2, 159, 20.0, 7, 8, 'wickets', 1),
+(45, '2026-05-03', 10, 4, 'Rajiv Gandhi International Stadium, Hyderabad', 165, 19.0, 10, 169, 18.2, 3, 7, 'wickets', 4),
+(46, '2026-05-03', 3, 7, 'Narendra Modi Stadium, Ahmedabad', 167, 19.5, 6, 163, 20.0, 9, 4, 'wickets', 3),
+(47, '2026-05-04', 6, 5, 'Wankhede Stadium, Mumbai', 229, 18.4, 4, 228, 20.0, 5, 6, 'wickets', 6),
+(48, '2026-05-05', 2, 1, 'Arun Jaitley Stadium, New Delhi', 155, 20.0, 7, 159, 17.3, 2, 8, 'wickets', 1),
+(49, '2026-05-06', 10, 7, 'Rajiv Gandhi International Stadium, Hyderabad', 235, 20.0, 4, 202, 20.0, 7, 33, 'runs', 10),
+(50, '2026-05-07', 5, 9, 'Ekana Cricket Stadium, Lucknow', 209, 19.0, 3, 203, 19.0, 6, 6, 'runs', 5),
+(51, '2026-05-08', 2, 4, 'Arun Jaitley Stadium, New Delhi', 142, 20.0, 8, 147, 14.2, 2, 8, 'wickets', 4),
+(52, '2026-05-09', 8, 3, 'Sawai Mansingh Stadium, Jaipur', 152, 16.3, 10, 229, 20.0, 4, 77, 'runs', 3),
+(53, '2026-05-10', 1, 5, 'MA Chidambaram Stadium, Chennai', 208, 19.2, 5, 203, 20.0, 8, 5, 'wickets', 1),
+(54, '2026-05-10', 9, 6, 'Shaheed Veer Narayan Singh International Stadium, Raipur', 167, 20.0, 8, 166, 20.0, 7, 2, 'wickets', 9),
+(55, '2026-05-11', 7, 2, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 210, 20.0, 5, 216, 19.0, 7, 3, 'wickets', 2),
+(56, '2026-05-12', 3, 10, 'Narendra Modi Stadium, Ahmedabad', 168, 20.0, 5, 86, 14.5, 10, 82, 'runs', 3),
+(57, '2026-05-13', 9, 4, 'Shaheed Veer Narayan Singh International Stadium, Raipur', 194, 19.1, 4, 192, 20.0, 4, 6, 'wickets', 9),
+(58, '2026-05-14', 7, 6, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 200, 20.0, 8, 205, 19.5, 4, 6, 'wickets', 6),
+(59, '2026-05-15', 5, 1, 'Ekana Cricket Stadium, Lucknow', 188, 16.4, 3, 187, 20.0, 5, 7, 'wickets', 5),
+(60, '2026-05-16', 4, 3, 'Eden Gardens, Kolkata', 247, 20.0, 2, 218, 20.0, 4, 29, 'runs', 4),
+(61, '2026-05-17', 7, 9, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 199, 20.0, 8, 222, 20.0, 4, 23, 'runs', 9),
+(62, '2026-05-17', 2, 8, 'Arun Jaitley Stadium, New Delhi', 197, 19.2, 5, 193, 20.0, 8, 5, 'wickets', 2),
+(63, '2026-05-18', 1, 10, 'MA Chidambaram Stadium, Chennai', 180, 20.0, 7, 181, 19.0, 5, 5, 'wickets', 10),
+(64, '2026-05-19', 5, 8, 'Sawai Mansingh Stadium, Jaipur', 220, 20.0, 5, 225, 19.1, 3, 7, 'wickets', 8),
+(65, '2026-05-20', 4, 6, 'Eden Gardens, Kolkata', 148, 18.5, 6, 147, 20.0, 8, 4, 'wickets', 4),
+(66, '2026-05-21', 3, 1, 'Narendra Modi Stadium, Ahmedabad', 229, 20.0, 4, 140, 13.4, 10, 89, 'runs', 3),
+(67, '2026-05-22', 10, 9, 'Rajiv Gandhi International Stadium, Hyderabad', 255, 20.0, 4, 200, 20.0, 4, 55, 'runs', 10),
+(68, '2026-05-23', 5, 7, 'Ekana Cricket Stadium, Lucknow', 196, 20.0, 6, 200, 18.0, 3, 7, 'wickets', 7),
+(69, '2026-05-24', 6, 8, 'Wankhede Stadium, Mumbai', 175, 20.0, 9, 205, 20.0, 8, 30, 'runs', 8),
+(70, '2026-05-24', 4, 2, 'Eden Gardens, Kolkata', 163, 18.4, 10, 203, 20.0, 5, 40, 'runs', 2),
+(71, '2026-05-26', 9, 3, 'Himachal Pradesh Cricket Association Stadium, Dharamshala', 254, 20.0, 5, 162, 19.3, 10, 92, 'runs', 9),
+(72, '2026-05-27', 10, 8, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 196, 19.2, 10, 243, 20.0, 8, 47, 'runs', 8),
+(73, '2026-05-29', 3, 8, 'Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh', 219, 18.4, 3, 214, 20.0, 6, 7, 'wickets', 3),
+(74, '2026-05-31', 9, 3, 'Narendra Modi Stadium, Ahmedabad', 161, 18.0, 5, 155, 20.0, 8, 5, 'wickets', 9)
+ON DUPLICATE KEY UPDATE match_date=VALUES(match_date), team1_id=VALUES(team1_id), team2_id=VALUES(team2_id), venue=VALUES(venue), team1_runs=VALUES(team1_runs), team1_overs=VALUES(team1_overs), team1_wickets_lost=VALUES(team1_wickets_lost), team2_runs=VALUES(team2_runs), team2_overs=VALUES(team2_overs), team2_wickets_lost=VALUES(team2_wickets_lost), winning_margin=VALUES(winning_margin), winning_margin_type=VALUES(winning_margin_type), winner_id=VALUES(winner_id);
 
 -- =========================================================
 -- 4. BATTING SEASON TABLE
@@ -278,7 +317,12 @@ CREATE TABLE IF NOT EXISTS BattingSeason (
     sixes INT NOT NULL,
     batting_average DECIMAL(6,2),
     strike_rate DECIMAL(6,2),
-    FOREIGN KEY (player_id) REFERENCES Players(player_id) ON DELETE CASCADE
+    FOREIGN KEY (player_id) REFERENCES Players(player_id) ON DELETE CASCADE,
+    CONSTRAINT chk_batting_player_positive CHECK (player_id > 0),
+    CONSTRAINT chk_batting_counts_nonnegative CHECK (runs >= 0 AND balls_faced >= 0 AND fours >= 0 AND sixes >= 0),
+    CONSTRAINT chk_batting_boundary_runs CHECK (runs >= (fours * 4) + (sixes * 6)),
+    CONSTRAINT chk_batting_average_nonnegative CHECK (batting_average IS NULL OR batting_average >= 0),
+    CONSTRAINT chk_batting_strike_rate_nonnegative CHECK (strike_rate IS NULL OR strike_rate >= 0)
 );
 
 INSERT INTO BattingSeason
@@ -413,7 +457,10 @@ CREATE TABLE IF NOT EXISTS BowlingSeason (
     player_id INT PRIMARY KEY,
     wickets INT NOT NULL,
     economy_rate DECIMAL(5,2) NOT NULL,
-    FOREIGN KEY (player_id) REFERENCES Players(player_id) ON DELETE CASCADE
+    FOREIGN KEY (player_id) REFERENCES Players(player_id) ON DELETE CASCADE,
+    CONSTRAINT chk_bowling_player_positive CHECK (player_id > 0),
+    CONSTRAINT chk_bowling_wickets_nonnegative CHECK (wickets >= 0),
+    CONSTRAINT chk_bowling_economy_nonnegative CHECK (economy_rate >= 0)
 );
 
 INSERT INTO BowlingSeason (player_id, wickets, economy_rate) VALUES
@@ -488,7 +535,10 @@ CREATE TABLE IF NOT EXISTS AdminUsers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    email VARCHAR(100),
-    role VARCHAR(20) DEFAULT 'admin',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    email VARCHAR(100) NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'admin',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_admin_username_nonblank CHECK (CHAR_LENGTH(TRIM(username)) > 0),
+    CONSTRAINT chk_admin_password_hash_nonblank CHECK (CHAR_LENGTH(TRIM(password_hash)) > 0),
+    CONSTRAINT chk_admin_role_nonblank CHECK (CHAR_LENGTH(TRIM(role)) > 0)
 );

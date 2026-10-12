@@ -1,9 +1,54 @@
 import pymysql
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from flask import Blueprint, jsonify, request
 from backend.db import query_all, query_one, execute, transaction
 from backend.auth import hash_password, verify_password, create_token, admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+def validation_error(message):
+    return jsonify({"success": False, "error": message}), 400
+
+def parse_integer(value, field_name, minimum=0):
+    if value is None or isinstance(value, bool):
+        return None, f"{field_name} must be an integer greater than or equal to {minimum}."
+    try:
+        parsed = int(value)
+        if isinstance(value, float) and not value.is_integer():
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        return None, f"{field_name} must be an integer greater than or equal to {minimum}."
+    if parsed < minimum:
+        return None, f"{field_name} must be an integer greater than or equal to {minimum}."
+    return parsed, None
+
+def parse_decimal(value, field_name, allow_null=False):
+    if value is None or value == "":
+        if allow_null:
+            return None, None
+        return None, f"{field_name} is required and must be a non-negative number."
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None, f"{field_name} must be a non-negative number."
+    if not parsed.is_finite() or parsed < 0:
+        return None, f"{field_name} must be a non-negative number."
+    return parsed, None
+
+def database_error_response(error):
+    if isinstance(error, pymysql.IntegrityError):
+        code = error.args[0] if error.args else None
+        if code == 1062:
+            return jsonify({
+                "success": False,
+                "error": "This update conflicts with an existing record or unique value."
+            }), 409
+        return jsonify({
+            "success": False,
+            "error": f"Update rejected by database constraints: {error}"
+        }), 400
+    return jsonify({"success": False, "error": f"Database error: {error}"}), 500
 
 # =========================================================
 # AUTHENTICATION
@@ -51,12 +96,20 @@ def admin_me():
 def add_team():
     """Add a new team to the database."""
     data = request.get_json() or {}
-    team_id = data.get("team_id")
-    team_name = data.get("team_name", "").strip()
-    team_code = data.get("team_code", "").strip().upper()
+    team_id, error = parse_integer(data.get("team_id"), "team_id", minimum=1)
+    if error:
+        return validation_error(error)
+    team_name = data.get("team_name")
+    team_code = data.get("team_code")
+    if not isinstance(team_name, str) or not isinstance(team_code, str):
+        return validation_error("team_name and team_code must be text.")
+    team_name = team_name.strip()
+    team_code = team_code.strip().upper()
 
-    if not team_id or not team_name or not team_code:
-        return jsonify({"success": False, "error": "team_id, team_name, and team_code are required."}), 400
+    if not team_name or len(team_name) > 100:
+        return validation_error("team_name must contain 1 to 100 characters.")
+    if not team_code or len(team_code) > 10:
+        return validation_error("team_code must contain 1 to 10 characters.")
 
     existing_id = query_one("SELECT team_id FROM Teams WHERE team_id = %s", (team_id,))
     if existing_id:
@@ -71,18 +124,24 @@ def add_team():
                 (team_id, team_name, team_code))
         return jsonify({"success": True, "message": f"Team '{team_name}' created successfully."}), 201
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/teams/<int:team_id>", methods=["PUT"])
 @admin_required
 def edit_team(team_id):
     """Update team details."""
     data = request.get_json() or {}
-    team_name = data.get("team_name", "").strip()
-    team_code = data.get("team_code", "").strip().upper()
+    team_name = data.get("team_name")
+    team_code = data.get("team_code")
+    if not isinstance(team_name, str) or not isinstance(team_code, str):
+        return validation_error("team_name and team_code must be text.")
+    team_name = team_name.strip()
+    team_code = team_code.strip().upper()
 
-    if not team_name or not team_code:
-        return jsonify({"success": False, "error": "team_name and team_code are required."}), 400
+    if not team_name or len(team_name) > 100:
+        return validation_error("team_name must contain 1 to 100 characters.")
+    if not team_code or len(team_code) > 10:
+        return validation_error("team_code must contain 1 to 10 characters.")
 
     team = query_one("SELECT team_id FROM Teams WHERE team_id = %s", (team_id,))
     if not team:
@@ -98,7 +157,7 @@ def edit_team(team_id):
                 (team_name, team_code, team_id))
         return jsonify({"success": True, "message": "Team updated successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/teams/<int:team_id>", methods=["DELETE"])
 @admin_required
@@ -129,7 +188,7 @@ def delete_team(team_id):
         execute("DELETE FROM Teams WHERE team_id = %s", (team_id,))
         return jsonify({"success": True, "message": f"Team '{team['team_name']}' deleted successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database constraint error: {str(e)}"}), 500
+        return database_error_response(e)
 
 
 # =========================================================
@@ -141,12 +200,19 @@ def delete_team(team_id):
 def add_player():
     """Add a new player."""
     data = request.get_json() or {}
-    player_id = data.get("player_id")
-    player_name = data.get("player_name", "").strip()
-    team_id = data.get("team_id")
+    player_id, error = parse_integer(data.get("player_id"), "player_id", minimum=1)
+    if error:
+        return validation_error(error)
+    team_id, error = parse_integer(data.get("team_id"), "team_id", minimum=1)
+    if error:
+        return validation_error(error)
+    player_name = data.get("player_name")
+    if not isinstance(player_name, str):
+        return validation_error("player_name must be text.")
+    player_name = player_name.strip()
 
-    if not player_id or not player_name or not team_id:
-        return jsonify({"success": False, "error": "player_id, player_name, and team_id are required."}), 400
+    if not player_name or len(player_name) > 100:
+        return validation_error("player_name must contain 1 to 100 characters.")
 
     if query_one("SELECT player_id FROM Players WHERE player_id = %s", (player_id,)):
         return jsonify({"success": False, "error": f"Player ID {player_id} already exists."}), 409
@@ -159,18 +225,23 @@ def add_player():
                 (player_id, player_name, team_id))
         return jsonify({"success": True, "message": f"Player '{player_name}' added successfully."}), 201
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/players/<int:player_id>", methods=["PUT"])
 @admin_required
 def edit_player(player_id):
     """Edit player name or team assignment."""
     data = request.get_json() or {}
-    player_name = data.get("player_name", "").strip()
-    team_id = data.get("team_id")
+    team_id, error = parse_integer(data.get("team_id"), "team_id", minimum=1)
+    if error:
+        return validation_error(error)
+    player_name = data.get("player_name")
+    if not isinstance(player_name, str):
+        return validation_error("player_name must be text.")
+    player_name = player_name.strip()
 
-    if not player_name or not team_id:
-        return jsonify({"success": False, "error": "player_name and team_id are required."}), 400
+    if not player_name or len(player_name) > 100:
+        return validation_error("player_name must contain 1 to 100 characters.")
 
     if not query_one("SELECT player_id FROM Players WHERE player_id = %s", (player_id,)):
         return jsonify({"success": False, "error": f"Player {player_id} not found."}), 404
@@ -183,7 +254,7 @@ def edit_player(player_id):
                 (player_name, team_id, player_id))
         return jsonify({"success": True, "message": "Player updated successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/players/<int:player_id>", methods=["DELETE"])
 @admin_required
@@ -200,7 +271,7 @@ def delete_player(player_id):
             cur.execute("DELETE FROM Players WHERE player_id = %s", (player_id,))
         return jsonify({"success": True, "message": f"Player '{player['player_name']}' and associated stats deleted."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 
 # =========================================================
@@ -212,18 +283,37 @@ def delete_player(player_id):
 def add_match():
     """Add a new match."""
     data = request.get_json() or {}
-    match_number = data.get("match_number")
+    match_number, error = parse_integer(data.get("match_number"), "match_number", minimum=1)
+    if error:
+        return validation_error(error)
     match_date = data.get("match_date")
-    team1_id = data.get("team1_id")
-    team2_id = data.get("team2_id")
-    venue = data.get("venue", "").strip()
-    winner_id = data.get("winner_id")
+    try:
+        date.fromisoformat(match_date)
+    except (TypeError, ValueError):
+        return validation_error("match_date must be a valid date in YYYY-MM-DD format.")
+    team1_id, error = parse_integer(data.get("team1_id"), "team1_id", minimum=1)
+    if error:
+        return validation_error(error)
+    team2_id, error = parse_integer(data.get("team2_id"), "team2_id", minimum=1)
+    if error:
+        return validation_error(error)
+    venue = data.get("venue")
+    if not isinstance(venue, str):
+        return validation_error("venue must be text.")
+    venue = venue.strip()
+    winner_value = data.get("winner_id")
+    if winner_value in (None, ""):
+        winner_id = None
+    else:
+        winner_id, error = parse_integer(winner_value, "winner_id", minimum=1)
+        if error:
+            return validation_error(error)
 
-    if not match_number or not match_date or not team1_id or not team2_id:
-        return jsonify({"success": False, "error": "match_number, match_date, team1_id, and team2_id are required."}), 400
+    if not venue or len(venue) > 150:
+        return validation_error("venue must contain 1 to 150 characters.")
 
     if team1_id == team2_id:
-        return jsonify({"success": False, "error": "Team 1 and Team 2 cannot be the same team."}), 400
+        return validation_error("Team 1 and Team 2 cannot be the same team.")
 
     if query_one("SELECT match_number FROM Matches WHERE match_number = %s", (match_number,)):
         return jsonify({"success": False, "error": f"Match #{match_number} already exists."}), 409
@@ -235,16 +325,16 @@ def add_match():
         return jsonify({"success": False, "error": f"Team 2 (ID {team2_id}) does not exist."}), 400
 
     if winner_id and winner_id not in (team1_id, team2_id):
-        return jsonify({"success": False, "error": "Winner must be one of the participating teams (or NULL for pending)."}), 400
+        return validation_error("Winner must be one of the participating teams (or NULL for pending).")
 
     try:
         execute("""
             INSERT INTO Matches (match_number, match_date, team1_id, team2_id, venue, winner_id)
             VALUES (%s, %s, %s, %s, %s, %s)
-        """, (match_number, match_date, team1_id, team2_id, venue, winner_id if winner_id else None))
+        """, (match_number, match_date, team1_id, team2_id, venue, winner_id))
         return jsonify({"success": True, "message": f"Match #{match_number} created successfully."}), 201
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/matches/<int:match_number>", methods=["PUT"])
 @admin_required
@@ -252,30 +342,54 @@ def edit_match(match_number):
     """Update match details or record winner for a pending match."""
     data = request.get_json() or {}
     match_date = data.get("match_date")
-    team1_id = data.get("team1_id")
-    team2_id = data.get("team2_id")
-    venue = data.get("venue", "").strip()
-    winner_id = data.get("winner_id")  # Can be NULL or integer
+    try:
+        date.fromisoformat(match_date)
+    except (TypeError, ValueError):
+        return validation_error("match_date must be a valid date in YYYY-MM-DD format.")
+    team1_id, error = parse_integer(data.get("team1_id"), "team1_id", minimum=1)
+    if error:
+        return validation_error(error)
+    team2_id, error = parse_integer(data.get("team2_id"), "team2_id", minimum=1)
+    if error:
+        return validation_error(error)
+    venue = data.get("venue")
+    if not isinstance(venue, str):
+        return validation_error("venue must be text.")
+    venue = venue.strip()
+    winner_value = data.get("winner_id")
+    if winner_value in (None, ""):
+        winner_id = None
+    else:
+        winner_id, error = parse_integer(winner_value, "winner_id", minimum=1)
+        if error:
+            return validation_error(error)
+
+    if not venue or len(venue) > 150:
+        return validation_error("venue must contain 1 to 150 characters.")
 
     match = query_one("SELECT match_number FROM Matches WHERE match_number = %s", (match_number,))
     if not match:
         return jsonify({"success": False, "error": f"Match #{match_number} not found."}), 404
 
     if team1_id and team2_id and team1_id == team2_id:
-        return jsonify({"success": False, "error": "Team 1 and Team 2 cannot be the same team."}), 400
+        return validation_error("Team 1 and Team 2 cannot be the same team.")
 
     if winner_id and team1_id and team2_id and winner_id not in (team1_id, team2_id):
-        return jsonify({"success": False, "error": "Winner must be either Team 1 or Team 2."}), 400
+        return validation_error("Winner must be either Team 1 or Team 2.")
+
+    for team_id in (team1_id, team2_id):
+        if not query_one("SELECT team_id FROM Teams WHERE team_id = %s", (team_id,)):
+            return validation_error(f"Team ID {team_id} does not exist.")
 
     try:
         execute("""
             UPDATE Matches 
             SET match_date = %s, team1_id = %s, team2_id = %s, venue = %s, winner_id = %s
             WHERE match_number = %s
-        """, (match_date, team1_id, team2_id, venue, winner_id if winner_id else None, match_number))
+        """, (match_date, team1_id, team2_id, venue, winner_id, match_number))
         return jsonify({"success": True, "message": f"Match #{match_number} updated successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/matches/<int:match_number>", methods=["DELETE"])
 @admin_required
@@ -288,7 +402,7 @@ def delete_match(match_number):
         execute("DELETE FROM Matches WHERE match_number = %s", (match_number,))
         return jsonify({"success": True, "message": f"Match #{match_number} deleted successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 
 # =========================================================
@@ -300,23 +414,34 @@ def delete_match(match_number):
 def save_batting_record():
     """Create or update batting season record."""
     data = request.get_json() or {}
-    player_id = data.get("player_id")
-    runs = data.get("runs", 0)
-    balls_faced = data.get("balls_faced", 0)
-    fours = data.get("fours", 0)
-    sixes = data.get("sixes", 0)
-    batting_average = data.get("batting_average")
-    strike_rate = data.get("strike_rate")
+    player_id, error = parse_integer(data.get("player_id"), "player_id", minimum=1)
+    if error:
+        return validation_error(error)
+    counts = {}
+    for field in ("runs", "balls_faced", "fours", "sixes"):
+        counts[field], error = parse_integer(data.get(field, 0), field, minimum=0)
+        if error:
+            return validation_error(error)
+    runs = counts["runs"]
+    balls_faced = counts["balls_faced"]
+    fours = counts["fours"]
+    sixes = counts["sixes"]
+    if runs < fours * 4 + sixes * 6:
+        return validation_error("Runs must be at least four per four and six per six.")
 
-    if not player_id:
-        return jsonify({"success": False, "error": "player_id is required."}), 400
+    batting_average, error = parse_decimal(data.get("batting_average"), "batting_average", allow_null=True)
+    if error:
+        return validation_error(error)
+    strike_rate, error = parse_decimal(data.get("strike_rate"), "strike_rate", allow_null=True)
+    if error:
+        return validation_error(error)
 
     if not query_one("SELECT player_id FROM Players WHERE player_id = %s", (player_id,)):
         return jsonify({"success": False, "error": f"Player {player_id} does not exist."}), 400
 
     # Auto calculate strike rate if not provided and balls_faced > 0
     if strike_rate is None and balls_faced > 0:
-        strike_rate = round((runs / balls_faced) * 100, 2)
+        strike_rate = (Decimal(runs * 100) / Decimal(balls_faced)).quantize(Decimal("0.01"))
 
     try:
         sql = """
@@ -333,7 +458,7 @@ def save_batting_record():
         execute(sql, (player_id, runs, balls_faced, fours, sixes, batting_average, strike_rate))
         return jsonify({"success": True, "message": f"Batting record for player {player_id} saved successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/batting/<int:player_id>", methods=["DELETE"])
 @admin_required
@@ -343,7 +468,7 @@ def delete_batting_record(player_id):
         execute("DELETE FROM BattingSeason WHERE player_id = %s", (player_id,))
         return jsonify({"success": True, "message": f"Batting record for player {player_id} deleted."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 
 # =========================================================
@@ -355,12 +480,15 @@ def delete_batting_record(player_id):
 def save_bowling_record():
     """Create or update bowling season record."""
     data = request.get_json() or {}
-    player_id = data.get("player_id")
-    wickets = data.get("wickets", 0)
-    economy_rate = data.get("economy_rate")
-
-    if not player_id or economy_rate is None:
-        return jsonify({"success": False, "error": "player_id and economy_rate are required."}), 400
+    player_id, error = parse_integer(data.get("player_id"), "player_id", minimum=1)
+    if error:
+        return validation_error(error)
+    wickets, error = parse_integer(data.get("wickets", 0), "wickets", minimum=0)
+    if error:
+        return validation_error(error)
+    economy_rate, error = parse_decimal(data.get("economy_rate"), "economy_rate")
+    if error:
+        return validation_error(error)
 
     if not query_one("SELECT player_id FROM Players WHERE player_id = %s", (player_id,)):
         return jsonify({"success": False, "error": f"Player {player_id} does not exist."}), 400
@@ -376,7 +504,7 @@ def save_bowling_record():
         execute(sql, (player_id, wickets, economy_rate))
         return jsonify({"success": True, "message": f"Bowling record for player {player_id} saved successfully."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)
 
 @admin_bp.route("/bowling/<int:player_id>", methods=["DELETE"])
 @admin_required
@@ -386,4 +514,4 @@ def delete_bowling_record(player_id):
         execute("DELETE FROM BowlingSeason WHERE player_id = %s", (player_id,))
         return jsonify({"success": True, "message": f"Bowling record for player {player_id} deleted."})
     except pymysql.MySQLError as e:
-        return jsonify({"success": False, "error": f"Database error: {str(e)}"}), 500
+        return database_error_response(e)

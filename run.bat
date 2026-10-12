@@ -34,7 +34,25 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM 5. Display IP Address for access on other devices (Phones, Tablets)
+REM 5. Rebuild the frontend served by Flask
+echo [INFO] Rebuilding frontend for the unified server...
+where npm >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] npm is not installed or not in PATH. Install Node.js 20+ and try again.
+    pause
+    exit /b 1
+)
+pushd frontend
+call npm run build
+if errorlevel 1 (
+    popd
+    echo [ERROR] Frontend build failed. The server was not started.
+    pause
+    exit /b 1
+)
+popd
+
+REM 6. Display IP Address for access on other devices (Phones, Tablets)
 echo --------------------------------------------------------
 echo  ACCESS CRICKETVERSE ON ANY DEVICE:
 echo    - On this computer: http://localhost:5000
@@ -42,7 +60,7 @@ echo    - On phones/other devices on same WiFi:
 ipconfig | findstr /i "IPv4"
 echo --------------------------------------------------------
 
-REM 6. Launch Application
+REM 7. Launch Application
 echo [INFO] Starting CricketVerse Unified Server on port 5000...
 python backend/app.py
 pause

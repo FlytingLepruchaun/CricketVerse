@@ -15,6 +15,26 @@ import { api } from '../api/client';
 import TeamBadge from '../components/TeamBadge';
 import { TableSkeleton } from '../components/LoadingSkeleton';
 
+const formatTeamScore = (runs, wickets, overs) => {
+  if (runs == null && wickets == null && overs == null) return 'No score yet';
+
+  const formattedOvers = overs === null || overs === undefined
+    ? '–'
+    : Number(overs).toFixed(1);
+  return `${runs ?? '–'}/${wickets ?? '–'} (${formattedOvers})`;
+};
+
+const formatWinningMargin = (match) => {
+  if (!match.winner_code) return 'Result Pending';
+  if (match.winning_margin == null || !match.winning_margin_type) {
+    return `Winner: ${match.winner_name} (${match.winner_code}) — winning margin not provided`;
+  }
+
+  const unit = match.winning_margin_type === 'runs' ? 'run' : 'wicket';
+  const plural = match.winning_margin === 1 ? '' : 's';
+  return `Winner: ${match.winner_name} (${match.winner_code}) by ${match.winning_margin} ${unit}${plural}`;
+};
+
 export default function Matches({ initialStatus = 'all', initialMatchNumber = null, onNavigate }) {
   const [matches, setMatches] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -70,12 +90,6 @@ export default function Matches({ initialStatus = 'all', initialMatchNumber = nu
         if (res.success) {
           setMatches(res.data);
           setPagination(res.pagination);
-
-          // If initial match requested, open modal
-          if (initialMatchNumber) {
-            const found = res.data.find(m => m.match_number === initialMatchNumber);
-            if (found) setSelectedMatch(found);
-          }
         }
       } catch (err) {
         console.error('Fetch matches error:', err);
@@ -87,6 +101,21 @@ export default function Matches({ initialStatus = 'all', initialMatchNumber = nu
     const timer = setTimeout(fetchMatches, search ? 250 : 0);
     return () => clearTimeout(timer);
   }, [statusTab, selectedTeam, selectedVenue, search, startDate, endDate, order, page, limit]);
+
+  useEffect(() => {
+    if (!initialMatchNumber) return;
+
+    async function loadInitialMatch() {
+      try {
+        const res = await api.getMatchDetail(initialMatchNumber);
+        if (res.success) setSelectedMatch(res.data);
+      } catch (err) {
+        console.error('Fetch match detail error:', err);
+      }
+    }
+
+    loadInitialMatch();
+  }, [initialMatchNumber]);
 
   const handleClear = () => {
     setStatusTab('all');
@@ -359,6 +388,29 @@ export default function Matches({ initialStatus = 'all', initialMatchNumber = nu
               IPL 2026 Fixture Overview
             </h2>
 
+            <div className="my-5 grid grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-center">
+                <div className="text-xs font-semibold text-slate-400">{selectedMatch.team1_name}</div>
+                <div className="text-2xl font-black text-orange-400 mt-1">
+                  {formatTeamScore(
+                    selectedMatch.team1_runs,
+                    selectedMatch.team1_wickets_lost,
+                    selectedMatch.team1_overs
+                  )}
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-center">
+                <div className="text-xs font-semibold text-slate-400">{selectedMatch.team2_name}</div>
+                <div className="text-2xl font-black text-orange-400 mt-1">
+                  {formatTeamScore(
+                    selectedMatch.team2_runs,
+                    selectedMatch.team2_wickets_lost,
+                    selectedMatch.team2_overs
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Teams Head to Head Visual */}
             <div className="my-6 p-5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-around text-center">
               <div>
@@ -389,15 +441,11 @@ export default function Matches({ initialStatus = 'all', initialMatchNumber = nu
               <div className="flex justify-between py-2 border-b border-slate-800/80">
                 <span className="text-slate-400">Official Outcome:</span>
                 <span className={`font-bold ${selectedMatch.winner_code ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {selectedMatch.winner_code ? `Winner: ${selectedMatch.winner_name} (${selectedMatch.winner_code})` : 'Result Pending'}
+                  {formatWinningMargin(selectedMatch)}
                 </span>
               </div>
             </div>
 
-            {/* Respectful notice as requested */}
-            <div className="mt-5 p-3 rounded-xl bg-slate-950 text-[11px] text-slate-400 border border-slate-800">
-              Note: Database stores aggregate match results. Detailed innings scorecards are not fabricated.
-            </div>
           </div>
         </div>
       )}

@@ -182,5 +182,36 @@ class CricketVerseApiTests(unittest.TestCase):
         })
         self.assertEqual(res.status_code, 400)
 
+    def test_11_admin_rejected_updates_return_actionable_errors(self):
+        res = self.client.post("/api/admin/login", json={"username": "admin", "password": "Admin@123"})
+        token = res.get_json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        res = self.client.post("/api/admin/teams", headers=headers, json={
+            "team_id": 0,
+            "team_name": "Invalid Team",
+            "team_code": "INV"
+        })
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("team_id must be an integer", res.get_json()["error"])
+
+        res = self.client.post("/api/admin/batting", headers=headers, json={
+            "player_id": 103,
+            "runs": 5,
+            "balls_faced": 10,
+            "fours": 2,
+            "sixes": 0
+        })
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Runs must be at least", res.get_json()["error"])
+
+        res = self.client.post("/api/admin/bowling", headers=headers, json={
+            "player_id": 103,
+            "wickets": -1,
+            "economy_rate": 7.5
+        })
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("wickets must be an integer", res.get_json()["error"])
+
 if __name__ == "__main__":
     unittest.main()

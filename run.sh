@@ -27,6 +27,14 @@ python3 -m pip install -r requirements.txt --quiet
 echo "[INFO] Verifying MySQL connection and database schema..."
 python3 database/init_db.py
 
+# Build the frontend served by Flask
+if ! command -v npm >/dev/null 2>&1; then
+    echo "[ERROR] npm is not installed or not in PATH. Install Node.js 20+ and try again."
+    exit 1
+fi
+echo "[INFO] Rebuilding frontend for the unified server..."
+(cd frontend && npm run build)
+
 # Display IP for multi-device access
 echo "--------------------------------------------------------"
 echo " ACCESS CRICKETVERSE ON ANY DEVICE:"

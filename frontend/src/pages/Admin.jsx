@@ -19,7 +19,7 @@ import {
 import { api, getAuthToken, setAuthToken, removeAuthToken } from '../api/client';
 import TeamBadge from '../components/TeamBadge';
 
-export default function Admin({ onShowToast, onAuthChange }) {
+export default function Admin({ onShowToast, onAuthChange, onNavigate }) {
   const [token, setToken] = useState(getAuthToken());
   const [adminUser, setAdminUser] = useState(null);
   const [loginForm, setLoginForm] = useState({ username: 'admin', password: '' });
@@ -537,7 +537,16 @@ export default function Admin({ onShowToast, onAuthChange }) {
               <tbody className="divide-y divide-slate-800/60">
                 {matches.map((m) => (
                   <tr key={m.match_number} className="hover:bg-slate-800/40">
-                    <td className="py-2.5 px-3 font-bold text-orange-400">#{m.match_number}</td>
+                    <td className="py-2.5 px-3 font-bold text-orange-400">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('matches', { matchNumber: m.match_number })}
+                        className="hover:text-orange-300 hover:underline"
+                        title="View match details"
+                      >
+                        #{m.match_number}
+                      </button>
+                    </td>
                     <td className="py-2.5 px-3 text-slate-300 text-xs">{m.match_date}</td>
                     <td className="py-2.5 px-3 font-semibold text-white">{m.team1_code}</td>
                     <td className="py-2.5 px-3 font-semibold text-white">{m.team2_code}</td>

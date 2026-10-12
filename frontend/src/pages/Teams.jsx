@@ -232,9 +232,11 @@ export default function Teams({ selectedTeamId, onNavigate }) {
                 const isPending = m.result_status === 'Pending';
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={m.match_number}
-                    className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                    onClick={() => onNavigate('matches', { matchNumber: m.match_number })}
+                    className="w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-slate-600 transition"
                   >
                     <div>
                       <div className="flex items-center gap-2 mb-1">
@@ -260,7 +262,7 @@ export default function Teams({ selectedTeamId, onNavigate }) {
                         {m.result_status}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

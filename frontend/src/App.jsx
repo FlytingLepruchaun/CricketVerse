@@ -123,7 +123,7 @@ export default function App() {
           />
         )}
         {activePage === 'admin' && (
-          <Admin onShowToast={showToast} onAuthChange={setIsAdminLoggedIn} />
+          <Admin onShowToast={showToast} onAuthChange={setIsAdminLoggedIn} onNavigate={handleNavigate} />
         )}
       </main>
 

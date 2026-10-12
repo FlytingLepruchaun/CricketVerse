@@ -137,6 +137,8 @@ python database/init_db.py
 - Creates the default administrator account (`admin` / `Admin@123`).
 - Displays a verification report showing exact row counts.
 
+For an existing database, rerun this command after updating the project. It adds any missing match score columns before loading the match seed data; it does not require resetting the database.
+
 ---
 
 #### Step 5: Start the Application!
@@ -149,6 +151,8 @@ python database/init_db.py
   chmod +x run.sh
   ./run.sh
   ```
+
+The launcher rebuilds the frontend before starting Flask, so the server serves the latest frontend source on each run.
 - **Manual Command**:
   ```bash
   python backend/app.py
